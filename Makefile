@@ -43,7 +43,7 @@ clean:
 	rm -f `find|egrep '~$$'`
 	rm -f *.po
 	rm -f *.tmp
-	rm -f magicpo-$(MYVERSION).tar.bz2 magicpo-gitsnapshot.tar.bz2
+	rm -f magicpo-$(MYVERSION).tar.bz2 magicpo-gitsnapshot-*.tar.bz2
 	rm -rf magicpo-$(MYVERSION) magicpo-$(MYVERSION)-*git
 # Verify syntax and run automated tests
 test:
@@ -75,7 +75,7 @@ distrib: distclean test man
 gitsnapshot:
 	./tools/SetVersion "$(VERSION)-$(GITREV)git"
 	-make distrib
-	mv magicpo-$(VERSION)-$(GITREV)git.tar.bz2 magicpo-gitsnapshot.tar.bz2
+	mv magicpo-$(VERSION)-$(GITREV)git.tar.bz2 magicpo-gitsnapshot-$(GITREV).tar.bz2
 	./tools/SetVersion "$(VERSION)"
 # User-facing version of gitsnapshot
 gitdistrib: MYVERSION =$(VERSION)-$(GITREV)git
