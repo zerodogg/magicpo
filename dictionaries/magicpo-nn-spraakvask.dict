@@ -1,0 +1,116 @@
+# MagicPO Norwegian Nynorsk språkvask dictionary
+# Copyright (C) 2008 Eskild Hustvedt
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+# sideformer
+stadar = stader
+stadane = stadene
+
+
+# -nad-ord
+kostnadar = kostnader
+kostnadane = kostnadene
+merknadar = merknader
+merknadane = merknadene
+førespurnadar = førespurnader
+førespurnadane = førespurnadene
+
+
+# skrivefeil
+ei frase = ein frase
+fraser = frasar
+# men ikkje endra Fraser Lake:
+Fraser Lake = Fraser Lake
+kalendar* = kalender
+handheldte = handhaldne
+vedlikeheldar = vedlikehaldar
+tolmodig* = tålmodig
+eit faneblad = ei fane
+fanebladet = fana
+noko e-postadress[ae] = noka e-postadresse
+ei e-postadressa = ei e-postadresse
+ei avsendaradressa = ei avsenderadresse
+uten = utan
+kun = berre
+
+
+# ord me har blitt einige om
+nyheitsgruppe* = diskusjonsgruppe
+kommadelt* = kommaskild
+KDE-laget = KDE-gruppa
+behandl[ae] = handsama
+*behandling* = handsaming
+brukarval = innstillingar
+snarvegtast* = snøggtast
+gildskap = gyldigheit
+
+
+# ordformer me har blitt einige om
+attende = tilbake
+bare = berre
+å bli = å verta
+blir = vert
+blei = vart
+Bli = Vert
+# Obs: «blitt» er ikkje med, sidan det kan verta til tre ulike former
+#      («vorten», «vorte», «vortne)», og «bli» er ikkje med, då
+#      det kan vera både imperativ (→ vert, ikkje verta) og infinitiv.
+førenamn* = fornamn
+førebokstav* = forbokstav
+framføre = framfor
+fyrst = først
+gamal = gammal
+gjennomsynleg = gjennomsiktig
+giss[ae] = gjetta
+hør[ae]* = høyra
+kjør[ae]* = køyra
+lata = la
+ljos* = lys
+*laup = løp
+*lykka = lukka
+moge?leg = mogleg
+muleg = mogleg
+mye = mykje
+nyhende = nyheiter
+nyhende* = nyheits
+naudsynt = nødvendig
+*resurs* = ressurs
+samstundes = samtidig
+*slådd = slått
+*slådde = slåtte
+*slegne = slåtte
+*slegen? = slått
+# Men ikkje kjenslege → kjenslått:
+kjenslege = kjenslege
+tøm[ae] = tømma
+verkty = verktøy
+*viljug = villig
+unnatak = unntak
+velkomen = velkommen
+
+
+# nokre vanlige e-infinitiv som må rettast
+# Obs: Ikkje legg til for eksempel «sende = senda» («Mappa inneheld 5 sende dokument.»)
+vere = vera
+bruke = bruka
+lagre = lagra
+spele = spela
+køyre = køyra
+
+
+# programnamn
+Kontact* = Kontakt
+

@@ -1,0 +1,736 @@
+#!/usr/bin/perl
+# gtk-magicpo
+# Graphical interface to the MagicPO translation libs
+# Copyright (C) Eskild Hustvedt 2008
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+use strict;
+use warnings;
+
+require 5.6.0;          # Use of proper utf8 requires perl 5.6 or later
+use Gtk2;
+use Getopt::Long;	# Commandline parsing
+use Carp;
+use File::Basename;	# Needed to find out our directory and name
+use File::Copy;		# We need to copy files
+use utf8;		# Allow the use of utf8 in the source code
+use Cwd;		# We need realpath();
+use POSIX qw(locale_h);	# We need setlocale();
+use Fatal qw(open);
+use constant { 
+	true => 1, 
+	false => 0,
+	# Mode definitions
+	
+	# The dictionary mode. Classic MagicPO and default
+	MODE_DICT => 5,
+	# The database mode
+	MODE_DB => 6,
+	# The mode that creates a database
+	MODE_MKDB => 7,
+
+};
+# Used to locate our own modules
+use FindBin;
+use lib "$FindBin::RealBin/modules/";
+# The PO-parser
+use MagicPO::Parser;
+# The dictionary loader
+use MagicPO::DictLoader;
+# The main worker
+use MagicPO::Magic;
+# See to that correct locale is set, manually (use encoding 'utf8' is broken).
+{
+	my $locale = setlocale(LC_CTYPE);
+	$locale =~ s/\..+$//;
+	$locale .= '.UTF8';
+	setlocale(LC_CTYPE,$locale);
+}
+use locale;		# Use POSIX locales for things like sorting
+
+my $pbar;
+my $callP = 0;
+my $progMax = 30;
+my $RCSRev = '$Id$';
+my $Version = '0.4';
+my $listEnt = 0;
+
+# Purpose: Display an info dialog
+# Usage: MPInfo("message");
+sub MPInfo
+{
+		my $Dialog = Gtk2::MessageDialog->new(undef, 'modal', 'info', 'ok', $_[0]);
+		$Dialog->set_title(_('MagicPO'));
+		$Dialog->run();
+		$Dialog->destroy();
+		return true;
+}
+
+# Purpose: Display an error dialog
+# Usage: MPInfo("message");
+sub MPError
+{
+		my $Dialog = Gtk2::MessageDialog->new(undef, 'modal', 'error', 'ok', $_[0]);
+		$Dialog->set_title(_('MagicPO Error'));
+		$Dialog->run();
+		$Dialog->destroy();
+		return true;
+}
+
+# Purpose: Get a list of dictionaries
+# Usage: href = GetDictionaryList();
+sub DetectDictionary {
+	# Get the directory containing magicpo
+	my $basedir = Cwd::realpath($0);
+	$basedir = dirname($basedir);
+
+	# The hash of dictionaries
+	my %DictHash;
+	foreach my $dir ('./',$ENV{HOME},$basedir.'/dictionaries',$basedir,$ENV{HOME}.'/.magicpo/')
+	{
+		next if not -d $dir;
+		foreach my $dict (glob($dir.'/magicpo*dict'))
+		{
+			if (-e $dict and -r $dict and -f $dict)
+			{
+				$dict = Cwd::realpath($dict);
+				$DictHash{$dict} = true;
+			}
+		}
+	}
+
+	return \%DictHash;
+}
+
+# Purpose: Flush the UI buffer
+# Usage: GTK_Flush();
+sub GTK_Flush
+{
+	Gtk2->main_iteration while Gtk2->events_pending;
+	Gtk2->main_iteration while Gtk2->events_pending;
+	Gtk2->main_iteration while Gtk2->events_pending;
+}
+
+# Purpose: Create a progresswindow
+# Usage: my $ProgressWin = MPCreateProgressWin(WINDOW NAME, INITIAL PROGRESS BAR TEXT, PULSATE_MODE?,MAINWIN);
+#	Returns a hashref with the following keys:
+#		Window = The window
+#		ProgressBar = The progress bar
+sub MPCreateProgressWin {
+	my ($Name, $Text, $PulsateMode,$MainWin) = @_;
+	my %ProgressHash;
+	$ProgressHash{Window} = Gtk2::Window->new();
+	$ProgressHash{Window}->set_skip_taskbar_hint(1);
+	$ProgressHash{Window}->set_skip_pager_hint(1);
+	$ProgressHash{Window}->set_type_hint('dialog');
+	if(defined($Name))
+	{
+		$ProgressHash{Window}->set_title($Name);
+	}
+	$ProgressHash{ProgressBar} = Gtk2::ProgressBar->new();
+	$ProgressHash{Window}->add($ProgressHash{ProgressBar});
+	if ($MainWin)
+	{
+		$ProgressHash{Window}->set_transient_for($MainWin);
+		$ProgressHash{Window}->set_position('center-on-parent');
+	}
+	else
+	{
+		$ProgressHash{Window}->set_position('center');
+	}
+	$ProgressHash{Window}->set_modal(1);
+	$ProgressHash{Window}->set_resizable(0);
+	if(defined($Text)) {
+		$ProgressHash{ProgressBar}->set_text($Text);
+	} else {
+		$ProgressHash{ProgressBar}->set_fraction(0);
+	}
+	if($PulsateMode) {
+		$ProgressHash{ProgressBar}->{activity_mode} = 0;
+	}
+	$ProgressHash{ProgressBar}->show();
+	$ProgressHash{Window}->show();
+	GTK_Flush();
+	return(\%ProgressHash);
+}
+
+# Purpose: Destroy a progress window created with DPCreateProgressWin()
+# Usage: MP_DestroyProgressWin(HASH);
+sub MP_DestroyProgressWin
+{
+	my $win = shift;
+	$win->{Window}->destroy();
+}
+
+# Purpose: Pulsate a progressbar
+# Usage: PulsateProgressbar($Progressbar, newtext?);
+sub PulsateProgressbar {
+	my $ProgressHash = shift;
+	my $text = shift;
+	if(defined($ProgressHash)) {		# So that the calling function can just *assume* it has a progressbar
+						# even when it doesn't
+		my $Bar = $ProgressHash->{ProgressBar};
+		if ($text)
+		{
+			$Bar->set_text($text);
+		}
+		$Bar->pulse();
+		GTK_Flush();
+	}
+	return(1);
+}
+
+# Purpose: Translation wrapper pending later addition of translations
+# Usage: string = _(string);
+sub _
+{
+	if (scalar @_ > 1)
+	{
+		return(@_);
+	}
+	else
+	{
+		return shift;
+	}
+}
+
+# Purpose: Validate that a file exists
+# Usage: bool = ValidateFile(pathtofile);
+sub ValidateFile
+{
+	my $file = shift;
+	if(not -e $file)
+	{
+		MPError(sprintf(_('%s does not exist'),$file));
+		return;
+	}
+	if (-d $file)
+	{
+		MPError(sprintf(_('%s is a directory, not a file'),$file));
+		return;
+	}
+	if(not -r $file)
+	{
+		MPError(sprintf(_('%s is not readable'),$file));
+		return;
+	}
+	if(not -w $file)
+	{
+		MPError(sprintf(_('%s is not writable'),$file));
+		return;
+	}
+	return true;
+}
+
+# Purpose: Display a question dialog
+# Usage: DPQuestion("Question");
+#	Returns true on yes, false on anything else
+sub DPQuestion {
+	my $Dialog = Gtk2::MessageDialog->new(undef, 'modal', 'question', 'yes-no', $_[0]);
+	my $Reply = $Dialog->run();
+	$Dialog->destroy();
+	if ($Reply eq 'yes') {
+		return(1);
+	} else {
+		return(0);
+	}
+}
+
+# Purpose: Perform a dictionary based translation
+# Usage: performDictionaryTranslation(mainWindow, dictInfo);
+sub performDictionaryTranslation
+{
+	my $mainWin = shift;
+	my $dictInfo = shift;
+
+	# First extract all information from the UI
+	my $targetFile = $dictInfo->{file}->get_text();
+	my $dictFile = $dictInfo->{dictCombo}->get_active_text();
+	my $mergeFile;
+	my $replaceFuzzy = false;
+	$dictFile = $dictInfo->{dictmapping}->{$dictFile};
+
+	if(not length($targetFile))
+	{
+		MPError(_('You must enter a target file'));
+		return;
+	}
+	return if not ValidateFile($targetFile);
+	if (not -e $dictFile or not -r $dictFile)
+	{
+		MPError(sprintf(_('Internal error: dictionary "%s" either does not exist or is not readable'),$dictFile));
+		return;
+	}
+	if($dictInfo->{mergeCheckbox}->get_active())
+	{
+		$mergeFile = $dictInfo->{mergeFile}->get_text();
+		if(not length($mergeFile))
+		{
+			MPError(_('You must enter a file to merge or uncheck the checkbox'));
+			return;
+		}
+		$replaceFuzzy = $dictInfo->{fuzzyrep}->get_active() ? true : false;
+		return if not ValidateFile($mergeFile);
+	}
+
+	$mainWin->set_sensitive(false);
+
+	$pbar = MPCreateProgressWin(_('Translating ...'),_('Loading dictionary'),true);
+
+	my $dict = MagicPO::DictLoader->new($dictFile,\&progressed);
+	$progMax = 1000;
+	PulsateProgressbar($pbar,_('Loading PO-file'));
+	my $file = MagicPO::Parser->new($targetFile,\&progressed);
+	if ($mergeFile)
+	{
+		$mergeFile = MagicPO::Parser->new($mergeFile,\&progressed);
+	}
+	PulsateProgressbar($pbar,_('Preparing'));
+	my $magic = MagicPO::Magic->new($dict,\&progressed,$replaceFuzzy,false);
+	$progMax = 2;
+	PulsateProgressbar($pbar,_('Translating'));
+	my $dirty = $magic->replaceFile($file,$mergeFile);
+	if ($dirty)
+	{
+		PulsateProgressbar($pbar,_('Writing file'));
+		$progMax = 500;
+		$file->write($targetFile);
+	}
+	
+	MP_DestroyProgressWin($pbar);
+	if ($dirty)
+	{
+		MPInfo(sprintf(_('Successfully translated "%s"'),$targetFile));
+	}
+	else
+	{
+		MPInfo(_('No changes were made'));
+	}
+	$mainWin->set_sensitive(true);
+}
+
+# Purpose: Something has progressed, let the user know
+# Usage: progressed();
+sub progressed
+{
+	if ($callP < $progMax)
+	{
+		$callP++;
+		return;
+	} else {
+		$callP = 0;
+	}
+	if ($pbar)
+	{
+		PulsateProgressbar($pbar);
+	}
+}
+
+# Purpose: Add a dictionary to the list
+# Usage: AddDictToList(list, path, dictMapping, CUSTOM?);
+# 	CUSTOM is a bool
+sub AddDictToList
+{
+	my $dictCombo = shift;
+	my $dict = shift;
+	my $dictMapping = shift;
+	my $custom = shift;
+	(my $name = basename($dict)) =~ s/^magicpo-//;
+	$name =~ s/\.dict$//;
+	if ($custom)
+	{
+		$name = _('Custom:').' '.$name;
+	}
+	if ($dictMapping->{$name})
+	{
+		(my $dir = dirname($dict)) =~ s/^$ENV{HOME}/~/;
+		$name = $name.' ('.$dir.')';
+	}
+	if ($dictMapping->{$name})
+	{
+		return;
+	}
+	$dictMapping->{$name} = $dict;
+	$dictCombo->append_text($name);
+	$listEnt++;
+	return true;
+}
+
+# Purpose: Create a file selector and run it
+# Usage: file = FileSelector('pattern','name');
+sub FileSelector
+{
+	my $pattern = shift;
+	my $name = shift;
+	my $win = shift;
+
+	my $fchooser = Gtk2::FileChooserDialog->new(_('Select dictionary'),$win,'open',
+		'gtk-cancel' => 'reject',
+		'gtk-open' => 'accept',
+	);
+	$fchooser->set_local_only(true);
+	$fchooser->set_default_response('accept');
+	my $filter = Gtk2::FileFilter->new();
+	$filter->add_pattern($pattern);
+	$filter->set_name($name);
+	$fchooser->add_filter($filter);
+	my $response = $fchooser->run();
+	my $filename = $fchooser->get_filename();
+	$fchooser->destroy();
+	if ($response eq 'accept')
+	{
+		return $filename;
+	}
+	return;
+}
+
+# Purpose: Create a file *SAVER* and run it
+# Usage: file = FileSaver(win);
+sub FileSaver
+{
+	my $win = shift;
+	my $fchooser = Gtk2::FileChooserDialog->new(_('Select dictionary'),$win,'save',
+		'gtk-cancel' => 'reject',
+		'gtk-open' => 'accept',
+	);
+	$fchooser->set_local_only(true);
+	$fchooser->set_default_response('accept');
+	my $response = $fchooser->run();
+	my $filename = $fchooser->get_filename();
+	$fchooser->destroy();
+	if ($response eq 'accept')
+	{
+		return $filename;
+	}
+	return;
+}
+
+# Purpose: Create the widgets for the dictionary translation
+# Usage: dictHashref = createDictionaryPart(mainWindow);
+sub createDictionaryPart
+{
+	my $win = shift;
+	my $table = Gtk2::Table->new(4,3);
+
+	# The dictionary label
+	my $dictLabel = Gtk2::Label->new(_('Dictionary: '));
+	$table->attach_defaults($dictLabel,0,1,0,1);
+
+	# The dictionary selector
+	my $dictCombo = Gtk2::ComboBox->new_text();
+	$dictCombo->insert_text(0,_('Custom'));
+	my $dictionaries = DetectDictionary();
+	my $dictMapping = {};
+	foreach my $dict (sort keys %{$dictionaries})
+	{
+		AddDictToList($dictCombo,$dict,$dictMapping,false);
+	}
+	$dictCombo->signal_connect('changed' => sub
+		{
+			my $act = $dictCombo->get_active_text();
+			if (defined $act and $act eq _('Custom'))
+			{
+				my $file = FileSelector('magicpo*.dict',_('MagicPO dictionaries'),$win);
+				if (defined $file)
+				{
+					if (AddDictToList($dictCombo,$file,$dictMapping,true))
+					{
+						$dictCombo->set_active($listEnt);
+					}
+					else
+					{
+						$dictCombo->set_active(1);
+					}
+				}
+				else
+				{
+					$dictCombo->set_active(1);
+				}
+			}
+		});
+	$dictCombo->set_active(1);
+	$table->attach_defaults($dictCombo,1,3,0,1);
+
+	# The file to translate
+	my $transFileLabel = Gtk2::Label->new(_('File: '));
+	$table->attach_defaults($transFileLabel,0,1,1,2);
+
+	# The file entrance box
+	my $inputFile = Gtk2::Entry->new(); 
+	$table->attach_defaults($inputFile,1,2,1,2);
+
+	# The browse button
+	my $browseButton = Gtk2::Button->new_from_stock('gtk-open');
+	$table->attach_defaults($browseButton,2,3,1,2);
+
+	# Save to
+	my $saveTo = Gtk2::Label->new(_('Write result to: '));
+	$table->attach_defaults($saveTo,0,1,2,3);
+	# The file entrance box
+	my $targetFile = Gtk2::Entry->new(); 
+	$table->attach_defaults($targetFile,1,2,2,3);
+	# The browse button
+	my $writeBrowseButton = Gtk2::Button->new_from_stock('gtk-save');
+	$table->attach_defaults($writeBrowseButton,2,3,2,3);
+
+	# Checkbutton for merging
+	my $mergebut = Gtk2::CheckButton->new(_('Merge result with: '));
+	$table->attach_defaults($mergebut,0,1,3,4);
+
+	# The seconds file entrance box
+	my $inputFileMerge = Gtk2::Entry->new(); 
+	$table->attach_defaults($inputFileMerge,1,2,3,4);
+
+	# The browse button
+	my $browseButtonMerge = Gtk2::Button->new_from_stock('gtk-open');
+	$table->attach_defaults($browseButtonMerge,2,3,3,4);
+
+	# Do you want to replace fuzzy strings? :)
+	my $fuzzyrep = Gtk2::CheckButton->new(_('Replace fuzzy strings'));
+	$table->attach_defaults($fuzzyrep,0,4,4,5);
+
+	# Merge button check signal
+	$mergebut->signal_connect('toggled' => sub {
+			if ($mergebut->get_active())
+			{
+				$inputFileMerge->set_sensitive(true);
+				$browseButtonMerge->set_sensitive(true);
+				$fuzzyrep->set_sensitive(true);
+			}
+			else
+			{
+				$inputFileMerge->set_sensitive(false);
+				$browseButtonMerge->set_sensitive(false);
+				$fuzzyrep->set_sensitive(false);
+			}});
+	$mergebut->signal_emit('toggled');
+
+	# Browse button callbacks
+	$browseButton->signal_connect('clicked' => sub {
+			my $file = FileSelector('*.po',_('Gettext PO-files'),$win);
+			if ($file)
+			{
+				$inputFile->set_text($file);
+				$inputFile->set_position(-1);
+				if (not length($targetFile->get_text()) or not $targetFile->get_text() =~ /\S/)
+				{
+					$targetFile->set_text($file);
+					$targetFile->set_position(-1);
+				}
+			}
+		});
+	$browseButtonMerge->signal_connect('clicked' => sub {
+			my $file = FileSelector('*.po',_('Gettext PO-files'),$win);
+			if ($file)
+			{
+				$inputFileMerge->set_text($file);
+				$inputFileMerge->set_position(-1);
+				if ((not length($targetFile->get_text()) or not $targetFile->get_text() =~ /\S/) or $targetFile->get_text() eq $inputFile->get_text())
+				{
+					$targetFile->set_text($file);
+					$targetFile->set_position(-1);
+				}
+			}
+		});
+	$writeBrowseButton->signal_connect('clicked' => sub {
+			my $file = FileSaver($win);
+			if ($file)
+			{
+				$targetFile->set_text($file);
+				$targetFile->set_position(-1);
+			}
+		});
+
+	$targetFile->show();
+	$saveTo->show();
+	$fuzzyrep->show();
+	$inputFileMerge->show();
+	$browseButtonMerge->show();
+	$writeBrowseButton->show();
+	$mergebut->show();
+	$browseButton->show();
+	$inputFile->show();
+	$transFileLabel->show();
+	$dictLabel->show();
+	$dictCombo->show();
+
+	# The return hash
+	my %Info = (
+		'main' => $table,
+		'file' => $inputFile,
+		'dictCombo' => $dictCombo,
+		'dictmapping' => $dictMapping,
+		'mergeFile' => $inputFileMerge,
+		'mergeCheckbox' => $mergebut,
+		'targetFile' => $targetFile,
+		'fuzzyrep' => $fuzzyrep,
+	);
+
+	return \%Info;
+}
+
+# Purpose: Create the widgets for the database translation
+# Usage: dbHashref = createDatabasePart(mainWindow);
+sub createDatabasePart
+{
+	my $table = Gtk2::Table->new(3,3);
+	return $table;
+}
+
+# Purpose: Create the widgets for the database creation
+# Usage: dbcreatorHashRef = createDatabaseCreatorPart(mainWindow);
+sub createDatabaseCreatorPart
+{
+	my $table = Gtk2::Table->new(3,3);
+	return $table;
+}
+
+# Purpose: Perform an action
+# Usage: performAction(mainWindow, actionCombo, dbPart, dictPart, mkdbPart);
+sub performAction
+{
+	my $win = shift;
+	my $actionCombo = shift;
+	my $dbPart = shift;
+	my $dictPart = shift;
+	my $mkdbPart = shift;
+
+	my $action = $actionCombo->get_active_text();
+
+	if($action eq _('Dictionary translation'))
+	{
+		performDictionaryTranslation($win,$dictPart);
+	}
+	elsif ($action eq _('Database translation'))
+	{
+		print "Would execute database translation\n";
+	}
+	elsif ($action eq _('Database creator'))
+	{
+		print "Would execute database creator\n";
+	}
+	else
+	{
+		die("Unknown action: $action\n");
+	}
+}
+
+# Purpose: Create the main window
+# Usage: createMainWindow();
+sub createMainWindow
+{
+	# Create the window
+	my $win = Gtk2::Window->new();
+	(my $RCS = $RCSRev) =~ s/^\S+\s+\S+\s+(\S+)\s+.*$/$1/;
+	$win->set_title('MagicPO '.$Version.' r'.$RCS);
+	$win->set_resizable(0);
+	$win->set_border_width(5);
+	$win->set_position('center');
+
+	# Create the vbox and add it to the window
+	my $vbox = Gtk2::VBox->new();
+	$win->add($vbox);
+	# Create the hbox and add it to the vbox
+	my $hbox = Gtk2::HBox->new();
+	$vbox->pack_start($hbox,false,false,false);
+
+	# The label before the action selector
+	my $actionLabel = Gtk2::Label->new(_('Action: '));
+	$hbox->pack_start($actionLabel,false,false,false);
+	
+	# Get widgets for the various parts
+	my $dictPart = createDictionaryPart($win);
+	$vbox->pack_start($dictPart->{main},false,false,false);
+	my $dbPart = createDatabasePart();
+	$vbox->pack_start($dbPart,false,false,false);
+	my $mkdbPart = createDatabaseCreatorPart();
+	$vbox->pack_start($mkdbPart,false,false,false);
+
+	# The button HBox
+	my $ButtonHBox = Gtk2::HBox->new();
+	$vbox->pack_end($ButtonHBox,false,false,false);
+
+	# The close button
+	my $closeButton = Gtk2::Button->new_from_stock('gtk-close');
+	$closeButton->signal_connect('clicked' => sub { $win->destroy() } );
+	$ButtonHBox->pack_end($closeButton,false,false,false);
+
+	# The 'execute' button
+	my $execButton = Gtk2::Button->new();
+	my $execImage = Gtk2::Image->new_from_stock('gtk-execute','button');
+	$execButton->set_image($execImage);
+	$ButtonHBox->pack_start($execButton,false,false,false);
+
+	# The action selector
+	my $actionCombo = Gtk2::ComboBox->new_text();
+	$actionCombo->insert_text(MODE_DICT,_('Dictionary translation'));
+	$actionCombo->insert_text(MODE_DB,_('Database translation'));
+	$actionCombo->insert_text(MODE_MKDB,_('Database creator'));
+	$actionCombo->signal_connect('changed' => sub {
+			my $act = $actionCombo->get_active_text();
+			if($act eq _('Dictionary translation'))
+			{
+				$dbPart->hide();
+				$mkdbPart->hide();
+				$dictPart->{main}->show();
+				$execButton->set_label(_('_Translate'));
+			}
+			elsif ($act eq _('Database translation'))
+			{
+				$mkdbPart->hide();
+				$dictPart->{main}->hide();
+				$dbPart->show();
+				$execButton->set_label(_('_Translate'));
+			}
+			elsif ($act eq _('Database creator'))
+			{
+				$dbPart->hide();
+				$dictPart->{main}->hide();
+				$mkdbPart->show();
+				$execButton->set_label(_('Create'));
+			}
+			else
+			{
+				die("Unknown active: $act\n");
+			}
+		});
+	$actionCombo->set_active(0);
+	# Action for the execute button
+	$execButton->signal_connect('clicked' => sub { performAction($win,$actionCombo,$dbPart,$dictPart,$mkdbPart) });
+
+	$hbox->pack_end($actionCombo,false,false,false);
+
+	# Show it all
+	$closeButton->show();
+	$execButton->show();
+	$ButtonHBox->show();
+	# FIXME: Add this back when the other UI is in
+	#$actionCombo->show();
+	#$actionLabel->show();
+	$vbox->show();
+	$hbox->show();
+	$win->show();
+
+	$win->signal_connect('destroy' => sub { exit(0) });
+}
+
+if(not $ENV{DISPLAY})
+{
+	die("This program requires that X is running. If you want to use it from the commandline use the 'magicpo' command instead.\n");
+}
+Gtk2->init();
+createMainWindow();
+# Rest in the Gtk2 main loop
+Gtk2->main();

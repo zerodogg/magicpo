@@ -1,0 +1,55 @@
+MagicPO version history
+***********************
+
+Version 0.4
+------------
+- Rewrote the dictionary loader and split it into a module (MagicPO::DictLoader)
+- Split string replacement into a module (MagicPO::Magic)
+- Split translation database into a module (MagicPO::TransDB)
+- Added automatic escaping of certain strings to the dictionary loader
+- Rewrote the dictionary manpage in POD
+- Proper handling of msgctxt
+- Added the gtk-magicpo GUI
+- Added the --nolasttrans commandline option, lets you tell MagicPO
+	not to update Last-Translator and X-Generator
+- Fixed an issue with priorities in dictionaries
+
+Version 0.3.1
+------------
+- Improved merging of po-files
+- Spaces can now be part of replacement strings
+- Improved detection of words
+- Makefile now installs the manpages
+- Makefile can now handle make install multiple times without uninstall
+- Added --whatchanged
+- --string is now less ugly
+- Added --replacefuzzy
+- -t is now an alias for --target
+- Fixed silent mode
+- Improved detection of stray strings during merging
+- MUCH FASTER merging of files
+- It will now detect duplicate strings and remove them
+- Added database-based translations (--mkdb and --dbfile). See the
+  manpage for details. This feature is still beta.
+- Many code cleanups and minor speedups
+- Various minor fixes
+
+- Updated dictionaries: magicpo-nn2nb.dict magicpo-da2nb.dict magicpo-nb2nn.dict
+- New dictionaries: magicpo-nn-spraakvask.dict magicpo-da2nn.dict
+
+Version 0.3
+------------
+- Complete rewrite of PO-loading and PO-writing module
+- Can now merge multiple files into one
+- Can now handle more exotic po-syntaxes
+- Now comes with a Makefile
+- Rewritten manpage
+- No longer assumes that the infile has been fully translated
+- Now marks strings changed by MagicPO as fuzzy
+	(can be disabled with --nomarkfuzzy)
+- Relicensed under GPLv3
+- Verbose by default
+
+Version 0.2
+-----------
+- First public release

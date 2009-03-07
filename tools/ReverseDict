@@ -1,0 +1,58 @@
+#!/usr/bin/perl
+# ReverseDict
+# Reverses a MagicPO dictionary.
+# $Id$
+# Copyright (C) Eskild Hustvedt 2006
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+
+use strict;
+use warnings;
+use File::Basename;
+
+die("Usage: ", basename($0), " [OLDFILE] [NEWFILE]") unless (defined($ARGV[0]) and length($ARGV[0]) and defined($ARGV[1]) and length($ARGV[1]));
+my $InFile = $ARGV[0];
+my $OutFile = $ARGV[1];
+die("$InFile does not exist\n") unless -e $InFile;
+die("$InFile is not readable\n") unless -r $InFile;
+
+$| = 1;
+
+open(INFILE, "<", $InFile) or die("Unable to open $InFile for reading: $!\n");
+open(OUTFILE, ">", $OutFile) or die("Unable to open $OutFile for writing: $!\n");
+print "Processing...";
+print OUTFILE "# $OutFile reversed\n";
+foreach(<INFILE>) {
+	print ".";
+	unless(/^\s*#/) {
+		if(/=/) {
+			chomp;
+			# Reverse the string here
+			my $From = $_;
+			my $To = $_;
+			$From =~ s/^\s*(.+)\s*=\s*(.+)\s*$/$1/;
+			$To =~ s/^\s*(.+)\s*=\s*(.+)\s*$/$2/;
+			# Add a fixme if the line has special characters
+			if(/[\*\+\[\]]/) {
+				$_ = "# FIXME: Special characters on the wrong side of the expression:\n";
+			} else {
+				$_ = "";
+			}
+			$_ .= "$To = $From\n";
+		}
+	}
+	print OUTFILE $_;
+}
+print "done\n";

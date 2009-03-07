@@ -1,0 +1,982 @@
+#!/usr/bin/perl
+# MagicPO
+# Assists in automated translations of gettext po-files
+# Copyright (C) Eskild Hustvedt 2005, 2006, 2007, 2008
+# Orignally forked from TransPO - copyright (C) 2003, 2004 Harald Thingelstad
+#
+# $Id$
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+use strict;
+use warnings;
+
+require 5.6.0;          # Use of proper utf8 requires perl 5.6 or later
+use strict;
+use warnings;
+use Getopt::Long;	# Commandline parsing
+use Carp;
+use File::Basename;	# Needed to find out our directory and name
+use File::Copy;		# We need to copy files
+use utf8;		# Allow the use of utf8 in the source code
+use Cwd;		# We need realpath();
+use POSIX qw(locale_h);	# We need setlocale();
+use Fatal qw(open);
+use constant { 
+	true => 1, 
+	false => 0,
+	# Mode definitions
+
+	# The dictionary mode. Classic MagicPO and default
+	MODE_DICT => 5,
+	# The database mode
+	MODE_DB => 6,
+	# The mode that creates a database
+	MODE_MKDB => 7,
+};
+# Used to locate our own modules
+use FindBin;
+use lib "$FindBin::RealBin/modules/";
+# The PO-parser
+use MagicPO::Parser;
+# The dictionary loader
+use MagicPO::DictLoader;
+# The main worker
+use MagicPO::Magic;
+# See to that correct locale is set, manually (use encoding 'utf8' is broken).
+{
+	my $locale = setlocale(LC_CTYPE);
+	$locale =~ s/\..+$//;
+	$locale .= '.UTF8';
+	setlocale(LC_CTYPE,$locale);
+}
+use locale;		# Use POSIX locales for things like sorting
+
+# Allow bundling of commandline parameters and 
+Getopt::Long::Configure ('bundling', 'prefix_pattern=(--|-)');
+
+my $Version = '0.4';			# Version number
+my $RCSRev = '$Id$'; # SVN Revision
+my (
+	$Dictionary,	$BaseDictionary,
+	$ReformatPOFileOnly,		$DebugMode,
+	$ReplaceString, $LastVerbLength,
+	$CurrentFile,	$NewerFile,			$OutFile,
+	$SourceDBFile,	$NoLastTrans,
+);	# Declare variables
+
+my $Verbose = true;
+my $MarkFuzzy = true;
+my $ReplaceFuzzy = false;
+# Default mode is DICT
+my $AppMode = MODE_DICT;
+my $ChangeTest = ' ';
+local $| = true;
+my ($callP,$lastP) = (0,undef);
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Various smaller functions
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Purpose: Output pretty progression indicator
+# Usage: progressed();
+#		- Outputs something every ten times it is called
+sub progressed
+{
+	return if not $Verbose;
+	if ($callP < 10)
+	{
+		$callP++;
+		return();
+	} else {
+		$callP = 0;
+	}
+	$lastP++;
+	local $| = false;
+	if(not defined($lastP) or $lastP == 1 or $lastP == 5){
+		print '-';
+	}elsif($lastP == 2 or $lastP == 6) {
+		print '\\';
+	}elsif($lastP == 3 or $lastP == 7) {
+		print '|';
+	}elsif($lastP == 4 or $lastP == 8) {
+		print '/';
+	}
+	$lastP = 0 if ($lastP == 8);
+	print "\b";
+	local $| = true;
+	return true;
+}
+
+# Purpose: Display a verbose status message
+# Usage: vprint('Current status');
+sub vprint {
+	return if not $Verbose;
+	print shift;
+	return true;
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Small helper functions
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Purpose: Print formatted --help output
+# Usage: PrintHelp("-shortoption", "--longoption", "description");
+#  Description will be reformatted to fit within a normal terminal
+sub PrintHelp {
+	# The short option
+	my $short = shift,
+	# The long option
+	my $long = shift;
+	# The description
+	my $desc = shift;
+	# The generated description that will be printed in the end
+	my $GeneratedDesc;
+	# The current line of the description
+	my $currdesc = '';
+	# The maximum length any line can be
+	my $maxlen = 80;
+	# The length the options take up
+	my $optionlen = 20;
+	# Check if the short/long are LONGER than optionlen, if so, we need
+	# to do some additional magic to take up only $maxlen.
+	# The +1 here is because we always add a space between them, no matter what
+	if ((length($short) + length($long) + 1) > $optionlen)
+	{
+		$optionlen = length($short) + length($long) + 1;
+	}
+	# Split the description into lines
+	foreach my $part (split(/ /,$desc))
+	{
+		if(defined $GeneratedDesc)
+		{
+			if ((length($currdesc) + length($part) + 1 + 20) > $maxlen)
+			{
+				$GeneratedDesc .= "\n";
+				$currdesc = '';
+			}
+			else
+			{
+				$currdesc .= ' ';
+				$GeneratedDesc .= ' ';
+			}
+		}
+		$currdesc .= $part;
+		$GeneratedDesc .= $part;
+	}
+	# Something went wrong
+	die('Option mismatch') if not $GeneratedDesc;
+	# Print it all
+	foreach my $description (split(/\n/,$GeneratedDesc))
+	{
+		printf "%-4s %-15s %s\n", $short,$long,$description;
+		# Set short and long to '' to ensure we don't print the options twice
+		$short = '';$long = '';
+	}
+	# Succeed
+	return true;
+}
+
+# Purpose: Print the magicpo version number
+# Usage: Version();
+sub Version {
+	print "\nMagicPO version $Version\n";
+	return true;
+}
+
+# Purpose: Print our help
+# Usage: Help();
+sub Help {
+	my $Command = basename($0);
+	Version();
+	print "\n";
+	print "Usage: $Command [Options] --dict dictionary  file1.po file2.po ...\n";
+	print "  or : $Command [Options] --mkdb file.mdb source1.po source2.po source3.po\n";
+	print "  or : $Command [Options] --dbfile file.mdb target.po target2.po ...\n\n";
+	PrintHelp('-h', '--help', 'Display this help screen');
+	PrintHelp('', '--string', 'Run replacements on the supplied string instead of a file');
+	PrintHelp('-f', '--dictfile X', 'Use the dictionary file X');
+	PrintHelp('-d', '--dict', 'Use the dictionary supplied. Use --dict list to list the possible parameters');
+	PrintHelp('-r', '--reformat', 'Don\'t actually replace anything, just write a reformatted file');
+	PrintHelp('', '--newer','Select the newer file for merging');
+	PrintHelp('', '--current','Select the current file for merging');
+	PrintHelp('-t', '--target', 'Output to the file supplied instead of back to the original file');
+	PrintHelp('-n', '--nomarkfuzzy', 'Don\'t mark changed strings as fuzzy');
+	PrintHelp('','--nolasttrans','Don\'t change "Last-Translator"');
+	PrintHelp('', '--debuginfo','Output some information useful for debugging');
+	PrintHelp('-s','--silent','Be silent');
+	PrintHelp('','--whatchanged','Lets you examine regular expressions. See the manpage.');
+	PrintHelp('','--replacefuzzy','Replace fuzzy strings with magicpo-translated strings when in merge mode.');
+	print "\n";
+	PrintHelp('','--mkdb X','Create a translation database for use with --dbfile (see the manpage).');
+	PrintHelp('','--dbfile X','Try to automatically translate the other files supplied on the commandline using the MagicPO translation database supplied to this argument.');
+	return true;
+}
+
+# Purpose: Get OS/distro version information
+# Usage: print "OS: ",GetDistVer(),"\n";
+sub GetDistVer {
+	# Try LSB first
+	my %LSB;
+	if (-e '/etc/lsb-release')
+	{
+		LoadConfigFile('/etc/lsb-release',\%LSB);
+		if(defined($LSB{DISTRIB_ID}) and $LSB{DISTRIB_ID} =~ /\S/ and defined($LSB{DISTRIB_RELEASE}) and $LSB{DISTRIB_RELEASE} =~ /\S/)
+		{
+			my $ret = '/etc/lsb-release: '.$LSB{DISTRIB_ID}.' '.$LSB{DISTRIB_RELEASE};
+			if(defined($LSB{DISTRIB_CODENAME}))
+			{
+				$ret .= ' ('.$LSB{DISTRIB_CODENAME}.')';
+			}
+			return($ret);
+		}
+	}
+	# GNU/Linux and BSD
+	foreach(qw/mandriva mandrakelinux mandrake fedora redhat red-hat ubuntu debian gentoo suse distro dist slackware freebsd openbsd netbsd dragonflybsd NULL/) {
+		if (-e "/etc/$_-release" or -e "/etc/$_-version" or -e "/etc/${_}_version" or $_ eq 'NULL') {
+			my ($DistVer, $File, $VERSION_FILE);
+			if(-e "/etc/$_-release") {
+				$File = "$_-release";
+				open($VERSION_FILE, '<', "/etc/$_-release") or next;
+				$DistVer = <$VERSION_FILE>;
+			} elsif (-e "/etc/$_-version") {
+				$File = "$_-version";
+				open($VERSION_FILE, '<', "/etc/$_-release") or next;
+				$DistVer = <$VERSION_FILE>;
+			} elsif (-e "/etc/${_}_version") {
+				$File = "${_}_version";
+				open($VERSION_FILE, '<', "/etc/${_}_version") or next;
+				$DistVer = <$VERSION_FILE>;
+			} elsif ($_ eq 'NULL') {
+				last if not -e '/etc/version';
+				$File = 'version';
+				open($VERSION_FILE, '<', '/etc/version') or next;
+				$DistVer = <$VERSION_FILE>;
+			}
+			close($VERSION_FILE) or warn("Failed to close filehandle for version input: $!\n");
+			chomp($DistVer);
+			return("/etc/$File: $DistVer");
+		}
+	}
+	# Didn't find anything yet. Get uname info
+	my ($sysname, $nodename, $release, $version, $machine) = POSIX::uname();
+	if ($sysname =~ /darwin/i) {
+		my $DarwinName;
+		my $DarwinOSVer;
+		# Darwin kernel, try to get OS X info.
+		if(InPath('sw_vers') and eval('use IPC::Open2;1')) {
+			if(open2(my $SW_VERS, my $NULL_IN, 'sw_vers')) {
+				while(<$SW_VERS>) {
+					chomp;
+					if (s/^ProductName:\s+//gi) {
+						$DarwinName = $_;
+					} elsif(s/^ProductVersion:\s+//) {
+						$DarwinOSVer = $_;
+					}
+				}
+				close($SW_VERS) or warn("Failed to close Open2 filehandle for sw_vers: $!\n");
+				close($NULL_IN) or warn("Failed to close Open2 (input) filehandle for sw_vers: $!\n");
+			}
+		}
+		if(defined($DarwinOSVer) and defined($DarwinName)) {
+			return("$DarwinName $DarwinOSVer ($machine)");
+		}
+	}
+	# Some distros set a LSB DISTRIB_ID but no version, try DISTRIB_ID
+	# along with the kernel info.
+	if ($LSB{DISTRIB_ID})
+	{
+		return($LSB{DISTRIB_ID}."/Unknown ($sysname $release $version $machine)");
+	}
+	return("Unknown ($sysname $release $version $machine)");
+}
+
+# Purpose: Load a configuration file
+# Usage: LoadConfigFile(/FILE, \%ConfigHash, \%OptionRegexHash, OnlyValidOptions?);
+#  OptionRegeXhash can be available for only a select few of the config options
+#  or skipped completely (by replacing it by undef).
+#  If OnlyValidOptions is true it will cause LoadConfigFile to skip options not in
+#  the OptionRegexHash.
+sub LoadConfigFile {
+	my ($File, $ConfigHash, $OptionRegex, $OnlyValidOptions) = @_;
+
+	open(my $CONFIG, '<', $File) or do {
+		DPIntWarn(sprintf('Unable to read the configuration settings from %s: %s', $File, $!));
+		return(0);
+	};
+	while(<$CONFIG>) {
+		next if m/^\s*(#.*)?$/;
+		next if not m/=/;
+		chomp;
+		my $Option = $_;
+		my $Value = $_;
+		$Option =~ s/^\s*(\w+)\s*=.*/$1/;
+		$Value =~ s/^\w+=\s*(.*)\s*/$1/;
+		if($OnlyValidOptions) {
+			if(not defined($OptionRegex->{$Option})) {
+				DPIntWarn("Unknown configuration option \"$Option\" (=$Value) in $File: Ignored.");
+				next;
+			}
+		}
+		if(not defined($Value)) {
+			DPIntWarn("Empty value for option $Option in $File");
+		}
+		if(defined($OptionRegex) and defined($OptionRegex->{$Option})) {
+			my $MustMatch = $OptionRegex->{$Option};
+			if (not $Value =~ /$MustMatch/) {
+				DPIntWarn("Invalid setting of $Option (=$Value) in the config file: Must match $OptionRegex->{Option}.");
+				next;
+			}
+		}
+		$ConfigHash->{$Option} = $Value;
+	}
+	close($CONFIG) or warn("Failed to close filehandle for $File: $!\n");;
+	return true;
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Initialization functions
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Purpose: Get the MagicPO::DictLoader object for the dictionary file supplied
+# Usage: get_dictloader(Dictionary);
+sub get_dictloader
+{
+	my $file = shift;
+	if ($Verbose)
+	{
+		my $VerboseDictName = $file;
+		my $basedir = Cwd::realpath($0);
+		$basedir = dirname($basedir);
+		$VerboseDictName =~ s#^$basedir(/dictionaries/?)?##g;
+		$VerboseDictName =~ s#^$ENV{HOME}#~#g;
+		vprint("Reading dictionary $VerboseDictName...");
+	}
+	my $dict = MagicPO::DictLoader->new($Dictionary,\&progressed);
+	if ($dict)
+	{
+		vprint("done (read $dict->{phrases} phrases)\n");
+		return $dict;
+	}
+	else
+	{
+		die("Fatal error while reading dictionary, giving up.\n");
+	}
+}
+
+# Purpose: Get the MagicPO::Magic object for the DictLoader supplied
+# Usage: get_magic(DictLoader object, replaceFuzzy?);
+# 	replaceFuzzy is a boolean that can be undef. If true then fuzzy strings
+# 	will be replaced by MagicPO processed strings.
+sub get_magic
+{
+	my $loader = shift;
+	my $replaceFuzzy = shift;
+	my $object = shift;
+
+	# If it's a string and not ' ', look it up
+	if ($object and not $ChangeTest eq ' ' and $ChangeTest =~ /\D/)
+	{
+		$ChangeTest = $object->{Lookup}{$ChangeTest};
+		if(not defined $ChangeTest)
+		{
+			warn("Failed to locate --whatchanged string\n");
+		}
+	}
+
+	my $magic = MagicPO::Magic->new($loader,\&progressed,$replaceFuzzy,$ChangeTest);
+	return $magic;
+}
+
+# Purpose: Replace a single string supplied on the commandline
+# Usage: ReplaceSingleString(STRING);
+sub ReplaceSingleString {
+	my $Replace = shift;
+	my $dict = get_dictloader($Dictionary);
+	my $magic = get_magic($dict,$ReplaceFuzzy);
+	my $str = $magic->replaceString($Replace);
+	print "$str\n";
+	return true;
+}
+
+# Purpose: Start replacing files
+# Usage: StartReplacement();
+sub StartReplacement {
+	my $dict;
+	if(not $ReformatPOFileOnly) {
+		$dict = get_dictloader($Dictionary);
+	}
+	if ($CurrentFile or $NewerFile)
+	{
+		if(not $CurrentFile)
+		{
+			die("--newer is required along with --current\n");
+		}
+		elsif(not $NewerFile)
+		{
+			die("--current is required along with --newer\n");
+		}
+		if (@ARGV)
+		{
+			die("You can not supply additional files when using --newer and --current\n");
+		}
+		push(@ARGV,$NewerFile);
+	}
+	if ($OutFile)
+	{
+		if (@ARGV > 1)
+		{
+			die("You can only MagicPO one file at a time when using --target\n");
+		}
+	}
+	die "I need to know which file to run on\n" if not @ARGV;
+	foreach my $filename (@ARGV) { 		# For each file to be processed
+		if(not -e $filename)
+		{
+			warn("$filename: does not exist. Skipped.\n");
+			next;
+		}
+		if(not -r $filename and -w $filename)
+		{
+			warn("$filename: permissions are wrong. Needs to be at least 600. Skipped.\n");
+			next;
+		}
+		if (-d $filename)
+		{
+			warn("$filename: is a directory. Skipped.\n");
+			next;
+		}
+		if(not -f $filename)
+		{
+			warn("$filename: is not a regular file. Skipped.\n");
+			next;
+		}
+		vprint($filename.":\n");
+		vprint('  Parsing...');
+		my $object = MagicPO::Parser->new($filename,\&progressed,$NoLastTrans);
+		vprint("done\n");
+		my $older;
+		if ($CurrentFile)
+		{
+			$older = MagicPO::Parser->new($CurrentFile,\&progressed,$NoLastTrans);
+		}
+		vprint '  Performing magic...';
+		# If markfuzzy mode is on and we're not going to merge two files, set markdirtymdoe to fuzzy.
+		# This causes MagicPO::Parser to mark the strings we change as fuzzy (which we don't want to do
+		#  in merge mode).
+		if ($MarkFuzzy and not $CurrentFile)
+		{
+			$object->markdirtymode('fuzzy');
+		}
+		else
+		{
+			$object->markdirtymode('normal');
+		}
+		my $magic;
+		my $isDirty;
+		if($ReformatPOFileOnly)
+		{
+			$isDirty = true;
+		}
+		else
+		{
+			$magic = get_magic($dict,$ReplaceFuzzy,$object);
+			$isDirty = $magic->replaceFile($object,$older); 	# replace strings.
+		}
+		if ($CurrentFile)
+		{
+			# If markfuzzy mode is on, then ensure we mark changed/new strings as fuzzy
+			if ($MarkFuzzy)
+			{
+				$older->markdirtymode('fuzzy');
+			}
+			$older->mergeobject($object,$ReplaceFuzzy);
+			$object = $older;
+			$filename = $CurrentFile;
+		}
+		if ($OutFile)
+		{
+			$filename = $OutFile;
+		}
+		vprint "done\n";
+		# Only write the file if it is dirty and we're not in any special mode.
+		if((not $CurrentFile) and (not $OutFile) and (not $isDirty) and (not $ReformatPOFileOnly))
+		{
+			vprint("  No changes made\n");
+		}
+		else
+		{
+			vprint('  Writing file to ');
+			if ($OutFile)
+			{
+				vprint($OutFile);
+			}
+			else
+			{
+				vprint($filename);
+			}
+			vprint('...');
+			if ($ReformatPOFileOnly)
+			{
+				# Mark it all as dirty
+				foreach(keys(%{$object->{PoFile}}))
+				{
+					progressed();
+					$object->markdirty($_);
+				}
+			}
+			$object->write($filename);
+			vprint("done\n");
+		}
+	}
+	return true;
+}
+
+# Purpose: Detect the dictionary file we want to use (sets $Dictionary or dies)
+# Usage: DetectDictionary();
+# FIXME: Global $Dictionary is ugly
+sub DetectDictionary {
+	# Get the directory containing magicpo
+	my $basedir = Cwd::realpath($0);
+	$basedir = dirname($basedir);
+	# An array of dictionaries.
+	my @Dicts;
+	# If $BaseDictionary is set, use that dictionary.
+	if ($BaseDictionary) {
+		@Dicts = ($BaseDictionary, $ENV{HOME}.'/'.$BaseDictionary, $basedir.'/'.$BaseDictionary);
+	} else {
+		# If it isn't set, try all known ones.
+		warn("MagicPO warning: no --dict provided by user, using the first dictionary that can be found\n");
+		my @DictionaryFiles = qw(magicpo.dict magicpo-nn2nb.dict magicpo-da2nb.dict magicpo-nb2nn.dict magicpo-da2nn.dict);
+		foreach (@DictionaryFiles) {
+			push(@Dicts, $_);
+			push(@Dicts, $ENV{HOME}.'/'.$_);
+			push(@Dicts, $basedir.'/'.$_);
+			push(@Dicts, $basedir.'/dictionaries/'.$_);
+		}
+	}
+	# Detect the dictionary
+	foreach (@Dicts) {
+		if ( -r $_ ) {
+			$Dictionary = $_;
+			last;
+		}
+	}
+	# Die if the dictionary couldn't be found.
+	if(not $Dictionary)
+	{
+		if(not $BaseDictionary) {
+			die "\nUnable to detect any dictionary! Use --dict to select one.\n";
+		} else {
+			die "\nUnable to find the dictionary file \"$BaseDictionary\"\n";
+		}
+	}
+	return $Dictionary;
+}
+
+# Purpose: Main function in MODE_DICT
+# Usage: main_dict();
+sub main_dict
+{
+	if (not $ReformatPOFileOnly) {
+		# Detect the location of the dictionary
+		DetectDictionary();
+	}
+
+	vprint "\n";
+	
+	# Okay, if we got this far then start replacing stuff :)
+	if($ReplaceString) {
+		ReplaceSingleString($ReplaceString);
+	} else {
+		StartReplacement();
+	}
+	return true;
+}
+
+# Purpose: Main function in MODE_DB and MODE_MKDB
+# Usage: main_transdb();
+sub main_transdb
+{
+	vprint 'Reading database...';
+	my $transdb = MagicPO::TransDB->new($SourceDBFile,\&progressed,$NoLastTrans);
+	vprint "done\n";
+	foreach(@ARGV)
+	{
+		if(not -e $_)
+		{
+			print "Ignoring file: '$_': $!\n";
+			next;
+		}
+		if ($AppMode == MODE_DB)
+		{
+			vprint "Translating $_...";
+			my $changed = $transdb->translate($_);
+			vprint "done - translated $changed string(s).\n";
+		}
+		elsif ($AppMode == MODE_MKDB)
+		{
+			vprint "Working on: $_\n";
+			$transdb->addpo($_);
+		}
+		else
+		{
+			die("In main_transdb() and AppMode is not MODE_DB nor MODE_MKDB ($AppMode)\n");
+		}
+	}
+	if ($AppMode == MODE_MKDB)
+	{
+		vprint "Writing database to $OutFile ...";
+		$transdb->writeDb($OutFile);
+		vprint "done\n";
+	}
+	return true;
+}
+
+# Purpose: Parse dictionary filename for --dict
+# Usage: parseDictName(NAME);
+sub parseDictName
+{
+	my $name = shift;
+	# First create a list of the dictionaries
+	# Get the directory containing magicpo
+	my $basedir = Cwd::realpath($0);
+	$basedir = dirname($basedir);
+	# The list of shorthands
+	my %FileHash;
+	# Fallback list of files
+	my %FallbackFiles;
+	# An array of dictionaries.
+	my @Dicts = ($ENV{HOME},$basedir.'/dictionaries',$basedir,getcwd());
+	foreach my $dir(@Dicts)
+	{
+		foreach my $file (glob($dir.'/magicpo-*.dict'))
+		{
+			next if not -r $file;
+			# Now try to parse the name.
+			my $fname = $file;
+			$fname =~ s/.*magicpo-//i;
+			$fname =~ s/\.dict$//i;
+			$fname =~ s/-//g;
+			$fname =~ s/spraakvask/fix/gi;
+			$fname =~ s/vask/fix/gi;
+			$fname =~ s/(.)to(.)/${1}2${2}/;
+			if(not $FileHash{$fname})
+			{
+				$FileHash{$fname} = $file;
+			}
+			# Now add the full path to the fallback
+			if(not $FallbackFiles{$file})
+			{
+				# Yeah, setting it to the same value as the key
+				# is useless, but works.
+				$FallbackFiles{$file} = $file;
+			}
+			# Finally add the filename to the fallback
+			my $basefile = basename($file);
+			if(not $FallbackFiles{$basefile})
+			{
+				$FallbackFiles{$basefile} = $file;
+			}
+		}
+	}
+	if ($name eq 'list')
+	{
+		printf('%-10s %s'."\n",'Name:','File:');
+		foreach my $key(sort keys(%FileHash))
+		{
+			my $file = $FileHash{$key};
+			$file =~ s#^$basedir/dictionaries/?##;
+			$file =~ s#^$basedir/?##;
+			$file =~ s#^$ENV{HOME}/?#~#;
+			printf('%-10s %s'."\n",$key,$file);
+		}
+		exit(0);
+	}
+
+	if ($FileHash{$name})
+	{
+		return($FileHash{$name});
+	}
+	else
+	{
+		if ($FallbackFiles{$name})
+		{
+			return($FallbackFiles{$name});
+		}
+		die("Unknown file supplied to --dict, try --dict list\n\n");
+	}
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Commandline processing
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Display help and exit if we got no commandline options
+Help() and exit 0 if not @ARGV;
+
+# Parse commandline arguments
+GetOptions (
+	'version' => sub { Version(); print "SVN Revision: $RCSRev\n"; exit 0; },
+	'help|h' => sub { Help(); exit 0 },
+	'string=s' => \$ReplaceString,
+	'dictfile|f=s' => \$BaseDictionary,
+	'dict|d=s' => sub
+	{
+		$BaseDictionary = parseDictName($_[1]);
+	},
+	'verbose|v' => \$Verbose,
+	'silent|s' => sub {
+		$Verbose = false;
+	},
+	'r|removebr|reformat' => \$ReformatPOFileOnly,
+	'debug|D' => \$DebugMode,
+	'current=s' => \$CurrentFile,
+	'newer=s' => \$NewerFile,
+	't|target=s' => \$OutFile,
+	'n|nomarkfuzzy' => sub { $MarkFuzzy = false },
+	'nolasttrans' => \$NoLastTrans,
+	'replacefuzzy' => \$ReplaceFuzzy,
+	'whatchanged=s' => \$ChangeTest,
+	'debuginfo' => sub {
+		Version();
+		print "RCSRev:                 $RCSRev\n";
+		print 'MagicPO::Parser:        '.$MagicPO::Parser::VERSION."\n";
+		print 'MagicPO::Parser RCSRev: '.$MagicPO::Parser::RCSREV."\n";
+		printf 'Perl version:          %vd'."\n", $^V;
+		print 'OS: ', GetDistVer(), "\n";
+		exit(0);
+	},
+	# Dict mode arguments
+	'dbsource|dbfile=s' => sub {
+		shift;
+		$SourceDBFile = shift;
+		$AppMode = MODE_DB;
+	},
+	'mkdb=s' => sub {
+		shift;
+		$OutFile = shift;
+		$AppMode = MODE_MKDB;
+	},
+) or die "See --help for more information\n";
+
+# Check which app mode we are in and run the correct main function
+if ($AppMode == MODE_DICT or $ReformatPOFileOnly)
+{
+	main_dict();
+}
+elsif ($AppMode == MODE_DB || $AppMode == MODE_MKDB)
+{
+	warn("MagicPO warning: Database mode is still somewat experimental, report any issues you might find.\n");
+	main_transdb();
+}
+else
+{
+	die("Unknown AppMode: $AppMode");
+}
+__END__
+
+=pod
+
+=head1 NAME
+
+MagicPO - automatically translate po-files
+
+=head1 SYNOPSIS
+
+B<magicpo> [I<OPTIONS>]
+
+=head1 DESCRIPTION
+
+B<MagicPO> is a utility that assists in automated translation of files in the 
+gettext PO format.
+
+It can translate between similar languages (such as Norwegian Nynorsk and Norwegian Bokmaal,
+or Norwegian Bokmaal and Danish) using a dictionary, or insert previous translations
+from a database.
+
+By default it uses a dictionary, is verbose and marks changed strings as fuzzy.
+The latter can be supressed with the --silent and --nomarkfuzzy commandline arguments.
+
+=head1 OPTIONS
+
+=over
+
+=head2 GENERAL OPTIONS
+
+=item B<-h, --help>
+
+Display the help screen
+
+=item B<-s, --silent>
+
+Be silent (don't output anything other than syntax errors)
+
+=item B<--debuginfo>
+
+Display various information useful for debugging.
+
+=item B<-r, --reformat>
+
+Don't perform any replacements or translations, just reformat the PO-file.
+Overrides everything else.
+
+=head2 DICTIONARY OPTIONS
+
+=item B<-d, --dict> I<NAME>
+
+Use the dictionary supplied. Try --dict list to view a list
+of possible dictionaries. This searches through a preset list of directories
+for dictionaries, and generates simple shorthand names for those.
+
+The searchpath is as follows:
+First it searches ~/, then the magicpo-dir/dictionaries, then magicpo-dir/
+and finally ./
+
+=item B<-f, --dictfile> I<FILE>
+
+Use the dictionary I<FILE>
+Using --dict is often easier, but this lets
+you explicitly set the file to use.
+
+=item B<-t, --target> I<FILE>
+
+Write the translated po-file to I<FILE> instead of back to the original.
+
+=item B<--newer>
+
+Selects the newer file for merging. See MERGING.
+
+=item B<--current>
+
+Selects the current (older) file for merging. See MERGING.
+
+=item B<--replacefuzzy>
+
+Replace fuzzy strings in --current file with non-fuzzy strings from --newer
+
+=item B<--nomarkfuzzy>
+
+Don't mark changed strings as fuzzy.
+
+=item B<--nolasttrans>
+
+Don't change "Last-Translator" in PO files.
+
+=item B<--whatchanged>
+
+This lets you examine which regular expressions are changing a certain string. The parameter
+is the string number in the file (the header is string number 1).
+So if you want to see which dictionary entries keep messing up string number 5, supply
+--whatchanged 5.
+
+You can also use --whatchanged "String". The string must then be EXACTLY as it is in
+the po-file. Also, this will not work when running on multiple files.
+
+=head2 DATABASE OPTIONS
+
+When either of these options are used, all dictionary-related commandline options will be
+ignored.
+
+=item B<--mkdb> I<FILE>
+
+Create a translation database in I<FILE> for use with --dbfile.
+
+This will create a single translation database comprised of all of the strings
+in all of the PO files you supply on the commandline. If the database already
+exists it will merely append to it. It ignores all fuzzy and untranslated strings
+in source files.
+
+For instance, one might create a translation database from a large svn project
+where you know that all of the relevant po files will be named nn.po:
+
+	magicpo --mkdb nn-magicpo.db `find ~/svn -iname nn.po`
+
+Or in a dir structure that already contains only po-files you want in the db:
+
+	magicpo --mkdb nn-magicpo.db `find ~/svn/nn -iname '*.po'`
+
+=item B<--dbfile> I<FILE>
+
+Translate all of the po-files supplied on the commandline using the translation
+database in I<FILE>. These strings will not be marked as fuzzy at all, regardless
+of settings.
+
+=back
+
+=head1 MERGING
+
+MagicPO can merge one po-file with another. Say for example that you have dayplanner.po in
+Norwegian Nynorsk for version 0.7 of Day Planner, but the Norwegian Bokmaal version is
+currently only updated for version 0.6. MagicPO can translate the Nynorsk file and add the
+new strings to the Bokmaal file, keeping all of the old Bokmaal strings intact.
+
+To do this run MagicPO like this:
+
+	magicpo --current dayplanner_nb.po --newer dayplanner_nn.po
+
+This will update dayplanner_nb.po to include the latest changes as per dayplanner_nn.po
+
+=head1 SYNTAX ERRORS
+
+MagicPO will display syntax error messages if it finds any. You are advised to check
+that the output file does not have any removed data when these appear (MagicPO will
+in most cases attempt to solve them).
+
+If you find an invalid syntax error you should report this as a bug.
+First verify manually in the ORIGINAL file that it is not a syntax error. Then
+provide both the old and the new file, the output of magicpo --debuginfo and a
+copy of all the error messages MagicPO displayed. See BUGS AND LIMITATIONS for information on
+how to report.
+
+=head1 EXIT STATUS
+
+0 for success, any nonzero value for failure.
+
+=head1 HISTORY
+
+MagicPO was originally TransPO. A simple perl program written by Harald Thingelstad
+to assist in automated translation. Eskild Hustvedt joined and became the primary
+maintainer of TransPO around 2005. In 2006 Harald had decided he wanted to rewrite
+TransPO in python, at this point Eskild forked it into MagicPO. Since then MagicPO
+has seen a lot of improvements, such as proper support for PO-files with tags,
+support for more advanced forms of PO-files and support for merging, and at the moment
+contain very very little of the original TransPO code.
+
+=head1 BUGS AND LIMITATIONS
+
+=over
+
+=item - Currently does not format po-files exactly the way msgmerge would.
+
+=item - Doesn't handle more than three msgstr's per string.
+
+=item - It is not possible to make it mark strings translated using the database
+as fuzzy
+
+=back
+
+Probably others too. Send reports, with any relevant information and the output of magicpo --debuginfo
+to zerodogg -a-t- zerodogg dot org
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (C) Eskild Hustvedt 2005, 2006, 2007, 2008
+
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+=head1 SEE ALSO
+
+magicpo.dict(5) - Dictionary syntax

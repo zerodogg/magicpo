@@ -1,0 +1,32 @@
+# Stolen from amarok.po and other sources.
+# Here to allow testing some odd files with MagicPO.
+msgid ""
+msgstr ""
+"Project-Id-Version: magicpo-test\n"
+"Report-Msgid-Bugs-To: MagicPO\n"
+"POT-Creation-Date: 2007-11-11 06:04+0100\n"
+"PO-Revision-Date: 2007-11-28 10:43+0100\n"
+"Last-Translator: MagicPO 0.3 (automated)\n"
+"Language-Team: /dev/null\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Generator: MagicPO 0.3\n"
+
+#: tracktooltip.cpp:47
+#, kde-format
+msgctxt "monthname year"
+msgid "%1 %2"
+msgstr "%1 %2"
+
+#: tracktooltip.cpp:54
+#, kde-format
+msgid "One week ago"
+msgid_plural "%1 weeks ago"
+msgstr[0] "Forrige uke"
+msgstr[1] "%1 uker siden"
+
+#: tracktooltip.cpp:57
+msgid "Tomorrow"
+msgstr "I morgen"

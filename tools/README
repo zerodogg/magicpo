@@ -1,0 +1,9 @@
+This directory contains various tools (and development tools) for MagicPO:
+
+Tools:
+ReverseDict     This reverses a dictionary. Ex. nn2nb becomes nb2nn.
+dictlint        Scans through a dictionary, looking for syntax errors.
+                Lines starting with E: are errors, W: are warnings.
+
+Development tools:
+SetVersion		Helper script for changing the magicpo version number

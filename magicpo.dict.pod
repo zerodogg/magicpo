@@ -1,0 +1,188 @@
+# Copyright (C) Eskild Hustvedt 2005, 2006, 2007, 2008
+#
+# $Id$
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+=pod
+
+=head1 NAME
+
+magicpo.dict - Dictionary for use with MagicPO
+
+=head1 DESCRIPTION
+
+This is the file magicpo reads to find out which words to replace with what.
+The syntax is as follows:
+
+from = to
+
+=head1 CASE SENSITIVITY
+
+Search expressions (the text before I<=>) are case insensitive if they start with
+a lowercase character, but case sensitive if they start with a uppercase character.
+For instance "no = yes" will match both No and no, but "No = yes" will match only
+No. The replacement string is not case sensitive.
+If the replacement string begins with a lowercase character, then it
+will be replaced with uppercase/lowercase as required. If it begins with an
+uppercase character all instances of the string will be replaced
+with the uppercased version. See SYNTAX EXAMPLES for more information.
+
+=head1 SPECIAL CHARACTERS AND WILDCARDS
+
+=over
+
+=item *
+
+"*" at the beginning of a word indicates that the word can also be part of another
+word. For instance "*no = yes" will replace "no" with "yes", but also
+"domino" with "domiyes". When placed at the end the phrase may be at the beginning of a word,
+and when placed both at the end and beginning it indicates that the word
+can either be alone, in the beginning, in the end, or in the middle of a word.
+
+=item +
+
+"+" at the beginning  (or end) of a word indicates that at \fIleast\fR one alphanumerical
+character must follow (or preceed) the word. For instance "no+ = yes" will not match "no",
+but will match "none" (IE. none becomes yesne).
+
+=item []
+
+Letters inside "[]" indicates that both letters inside "[]" can be at that place
+in the word. For instance "[tw]here = dark" will replace both where and there
+with dark (a useless replace, but it's an example).
+
+=item ? 
+
+A questionmark indicates that the preceeding letter \fBcan\fR be included,
+but that it doesn't need to. For instance "w?here = there" will replace
+both where and here with there.
+
+=item #
+
+A "#" in the beginning of a line indicates that the line is a comment,
+magicpo will skip the line completely.
+
+=back
+
+=head2 CHARACTERS REQUIRING ESCAPING
+
+Certain characters must be escaped when part of the 'from' expression.
+These are: [ ] ? + *
+
+Prefix the character with a \ to escape it
+
+=head1 PRECEDENCE
+
+To avoid small, unprecise expressions replacing words where a larger
+more precise expression would have done a better job magicpo uses a
+system of points:
+
+	- Each letter of a word gives one point. 
+
+	- Expressions without any "*" or "+" gets ten extra points
+
+	- Expressions with "+" gets one point for each "+"
+
+	- Expressions using "*" doesn't get any extra points
+
+Example: deactivate should match before activate, it is longer and thus
+gets two extra points and magicpo matches deactivate before it matches
+activate.
+
+=head1 SYNTAX EXAMPLES
+
+=over
+
+
+=item I<open> = I<free>
+
+Will replace the word "open" or "Open" with the word "free" or "Free".
+
+=item I<Open> = I<free>
+
+Will replace the word "Open" (case sensitive) with the word "Free"
+
+=item I<open> = I<Free>
+
+Will replace the word "open" or "Open" with the word "Free" (capital F in Free)
+
+=item I<open source> = I<free software>
+
+Will replace the phrase "open source" with the phrase "free software".
+
+=item I<*open> = I<free>
+
+Will replace the word "open" with the word "free", the "*" in the beginning indicates
+that "open" can also be the end of a word, so it will for instance also replace
+"not-open" with "not-free".
+
+=item I<open*> = I<free>
+
+Will replace the word "open" with the word "free", the * at the end indicates
+that "open" can also be the beginning of a word, so it will for instance also
+replace "open-source" with "free-source".
+
+=item I<*open*> = I<free>
+
+Will replace the word "open" with the word "free", the "*" at the beginning and end
+indicates that it can also be in the middle, beginning, or end of a word,
+so it will for instance repleace "not-open-source" with "not-free-source".
+
+=item I<open+> = I<free>
+
+Will replace the phrase "open-source" with the phrase "free-source", but will not
+replace the word "open" with "free". The reverse is true if the "+" is at the beginning.
+
+=item I<[tw]here> = I<that>
+
+Will replace both the "where" and "there" with "that".
+
+=item I<w?here> = I<there>
+
+Will replace both "where" and "here" with "there".
+
+=item I<# Free software = Open Source>
+
+The "#" in the beginning of a line indicates that it is a comment, magicpo will
+skip all lines beginning with "#".
+
+=item I<internet> = I<Internet>
+
+This will replace all instances of internet with Internet (with uppercase I)
+
+=item I<internet> = I<internet>
+
+This won't do anything. Internet is replaced with Internet, internet with internet.
+
+=back
+
+=head1 SYNTAX CHECKING
+
+You can check your dictionaries for errors and potential issues using the 'I<dictlint>'
+tool shipped with MagicPO. You can find I<dictlint> in the I<tools/> directory of the
+MagicPO tarball. Simply run it on your dictionary, like this:
+
+	./tools/dictlint magicpo-my.dict
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (C) Eskild Hustvedt 2008
+
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+=head1 SEE ALSO
+
+magicpo(1) - Main MagicPO manpage

@@ -1,0 +1,101 @@
+#!/usr/bin/perl
+# MagicPO dictionary lint
+# Copyright (C) Eskild Hustvedt 2006
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+
+use strict;
+use warnings;
+use File::Basename;
+
+die("Usage: ", basename($0), " file.dict\n") unless (defined($ARGV[0]) and length($ARGV[0])); 
+
+
+my $InFile = $ARGV[0];
+my $first = 1;
+die("$InFile does not exist\n") unless -e $InFile;
+die("$InFile is not readable\n") unless -r $InFile;
+$| = 1;
+
+my %WordHash;
+
+sub printFirst
+{
+	printf("%-7s%s\n", 'Line:','Message:');
+	$first = 0;
+}
+sub Error ($$) {
+	my ($Error,$Line) = @_;
+	printFirst if $first;
+	printf("%-7s%s\n", $Line, "E: $Error");
+}
+sub Warning ($$) {
+	my ($Warning,$Line) = @_;
+	printFirst if $first;
+	printf("%-7s%s\n", $Line, "W: $Warning");
+}
+sub Info
+{
+	my ($Notification,$Line) = @_;
+	printFirst if $first;
+	printf("%-7s%s\n", $Line, "N: $Notification");
+}
+
+open(INFILE, "<", $InFile) or die("Unable to open $InFile for reading: $!\n");
+my $LineNo;
+foreach(<INFILE>) {
+	$LineNo++;
+	next if /^\s*#/;
+	next if /^\s*$/;
+	unless(m/=/) {
+		Warning("Invalid line", $LineNo);
+		next;
+	}
+	next unless m/=/;
+	my $From = $_;
+	my $To = $_;
+	$From =~ s/^\s*(.+)\s*=\s?(.+)\s*$/$1/;
+	$To =~ s/^\s*(.+)\s*=\s?(.+)\s*$/$2/;
+	$From =~ s/\s*$//;
+
+	unless(length($To)) {
+		Warning("Empty space on the right hand side of the expression", $LineNo);
+	}
+	unless(length($From)) {
+		Warning("Empty space on the left hand side of the expression", $LineNo);
+	}
+	if($To =~ /[\*\+\[\]\?]/) {
+		Error("Special characters on the wrong side of the expression", $LineNo);
+	}
+	if ($To =~ /^\s+/)
+	{
+		Info("TO begins with multiple spaces. This might not do what you want. Only the first space is ignored (others are treated as part of the string).",$LineNo);
+	}
+	unless($_ =~ /^\s*(\*?)(.*?)(\*?)\s*\=\s?\*?(.*?)\*?\s*$/) {
+		Error("Unusable line", $LineNo);
+	}
+	if(defined($WordHash{$From})) {
+		Warning("Second translation of \"$From\" (first was on line $WordHash{$From})", $LineNo);
+	}
+	foreach my $c (qw# ! @ $ % & ( ) { } ^ | #)
+	{
+		my $regex = '\\\\\\'.$c;
+		if ($From =~ /$regex/)
+		{
+			Error("Line is using escaping of the character '$c'. This is no longer legal in 0.4 and is done automatically. Remove the escaping (\\)",$LineNo);
+		}
+	}
+	$WordHash{$From} = $LineNo;
+}

@@ -1,0 +1,40 @@
+This directory contains the bundled MagicPO dictionaries
+(you may also place your own here for them to be available with --dict).
+Follow the naming convention mentioned in this file to ensure that
+your dictionary file gets picked up by MagicPO.
+See magicpo.dict(5) for the syntax. If you want your dictionary to be bundled
+with MagicPO, mail it to zerodogg -a-t- zerodogg d0t org.
+Bundled dictionaries should be available under the GNU GPLv3 or later.
+
+File:                       Description
+
+magicpo-da2nb.dict          Dictionary for automatic translation of Danish to
+                            Norwegian Bokmål.
+
+magicpo-da2nn.dict          Dictionary for automatic translation of Danish to
+                            Norwegian Nynorsk.
+
+magicpo-nn2nb.dict          Dictionary for automatic translation of Norwegian Nynorsk
+                            to Norwegian Bokmål
+
+magicpo-nb-spraakvask.dict  Dictionary for fixing common translation mistakes in
+                            Norwegian Bokmål translations.
+
+magicpo-nn-spraakvask.dict  Dictionary for fixing common translation mistakes in
+                            Norwegian Nynorsk translations.
+
+magicpo-nb2nn.dict          Dictionary for automatic translation of Norwegian Bokmål
+                            to Norwegian Nynorsk.
+
+Naming convention:
+Prefix each file with magicpo- and use the .dict suffix.
+Translation dictionaries should be named magicpo-from2to.dict
+where from and to is the two character abbrivation for the language.
+
+Dictionaries that fix common translation mistakes should be named
+magicpo-lang-fix.dict - alternatively the -spraakvask suffix is
+allowed in place of -fix. Lang is also here the two character
+abbrivation for the language.
+
+$Id$
+vim: set expandtab :
