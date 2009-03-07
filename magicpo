@@ -4,8 +4,6 @@
 # Copyright (C) Eskild Hustvedt 2005, 2006, 2007, 2008
 # Orignally forked from TransPO - copyright (C) 2003, 2004 Harald Thingelstad
 #
-# $Id$
-#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
@@ -67,7 +65,6 @@ use locale;		# Use POSIX locales for things like sorting
 Getopt::Long::Configure ('bundling', 'prefix_pattern=(--|-)');
 
 my $Version = '0.4';			# Version number
-my $RCSRev = '$Id$'; # SVN Revision
 my (
 	$Dictionary,	$BaseDictionary,
 	$ReformatPOFileOnly,		$DebugMode,
@@ -728,7 +725,7 @@ Help() and exit 0 if not @ARGV;
 
 # Parse commandline arguments
 GetOptions (
-	'version' => sub { Version(); print "SVN Revision: $RCSRev\n"; exit 0; },
+	'version' => sub { Version(); exit 0; },
 	'help|h' => sub { Help(); exit 0 },
 	'string=s' => \$ReplaceString,
 	'dictfile|f=s' => \$BaseDictionary,
@@ -751,9 +748,6 @@ GetOptions (
 	'whatchanged=s' => \$ChangeTest,
 	'debuginfo' => sub {
 		Version();
-		print "RCSRev:                 $RCSRev\n";
-		print 'MagicPO::Parser:        '.$MagicPO::Parser::VERSION."\n";
-		print 'MagicPO::Parser RCSRev: '.$MagicPO::Parser::RCSREV."\n";
 		printf 'Perl version:          %vd'."\n", $^V;
 		print 'OS: ', GetDistVer(), "\n";
 		exit(0);

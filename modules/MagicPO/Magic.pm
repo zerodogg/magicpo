@@ -25,8 +25,6 @@ use constant {
 use Carp;
 our $VERSION;
 $VERSION = 0.4;
-our $RCSREV;
-$RCSREV = '$Id$';
 
 # Purpose: Create a new object
 # Usage: $obj = MagicPO::DictLoader->new(MagicPO::DictLoader, progressionCallback, replaceFuzzy?, monitorThis?);

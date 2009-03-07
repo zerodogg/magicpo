@@ -26,8 +26,6 @@ use Carp;
 use MagicPO::Parser;
 our $VERSION;
 $VERSION = 0.4;
-our $RCSREV;
-$RCSREV = '$Id$';
 
 # Purpose: Create a new object
 # Usage: $obj = MagicPO::TransDB->new(dictionary.mdb, progressionCallback,NoLastTranslator);

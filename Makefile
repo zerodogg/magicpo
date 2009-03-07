@@ -19,8 +19,8 @@ POD2MAN = $(shell [ ! -e "./magicpo.1" ] && echo man)
 ifneq ($(POD2MAN), man)
 POD2MAN = $(shell [ ! -e "./magicpo.dict.5" ] && echo man)
 endif
-# Extract the svn revision from the Id string
-SVNREV=$(shell perl -e "\$$_ = '$$Id$$';s/^\S+\s+\S+\s+(\d+)\s+.*$$/\$$1/;s/\D//g;print")
+# Extract the git revision from the log
+GITREV=$(shell git log|head|grep commit|perl -pi -e 'chomp; s/.//g if $$i; $$i =1;s/commit\s*//;')
 
 # Install magicpo
 install: $(POD2MAN)
@@ -44,8 +44,8 @@ clean:
 	rm -f `find|egrep '~$$'`
 	rm -f *.po
 	rm -f *.tmp
-	rm -f magicpo-$(MYVERSION).tar.bz2 magicpo-svnsnapshot.tar.bz2
-	rm -rf magicpo-$(MYVERSION) magicpo-$(MYVERSION)-*svn
+	rm -f magicpo-$(MYVERSION).tar.bz2 magicpo-gitsnapshot.tar.bz2
+	rm -rf magicpo-$(MYVERSION) magicpo-$(MYVERSION)-*git
 # Verify syntax and run automated tests
 test:
 	@perl -Imodules -c modules/MagicPO/Parser.pm
@@ -64,20 +64,20 @@ man:
 	pod2man --name "magicpo.dict" --center "" --release "MagicPO dictionary $(MYVERSION)" ./magicpo.dict.pod ./magicpo.dict.5
 # Clean up the tree to prepare for distrib
 distclean: clean
-	perl -MFile::Find -e 'use File::Path qw/rmtree/;find(sub { return if $$File::Find::name =~ m#/\.svn#; if(not -d $$_) { if(not -e "./.svn/text-base/$$_.svn-base") { print "unlink: $$File::Find::name\n";unlink($$_);}} else { if (not -d "$$_/.svn") { print "rmtree: $$_\n";rmtree($$_)}} },"./");'
+	perl -MFile::Find -e 'use File::Path qw/rmtree/;find(sub { return if $$File::Find::name =~ /\.git/; my $$i = `git stat $$_ 2>&1`; if ($$i =~ /^error.*did.*not.*match/) { if (-d $$_) { print "rmtree: $$File::Find::name\n"; rmtree($$_); } else {  print "unlink: $$File::Find::name\n"; unlink($$_); }}},"./");'
 # Create the tarball
 distrib: distclean test man
 	mkdir -p magicpo-$(MYVERSION)
 	cp -r ./`ls|grep -v magicpo-$(MYVERSION)` ./magicpo-$(MYVERSION)
-	rm -rf `find magicpo-$(MYVERSION) -name \\.svn`
+	rm -rf `find magicpo-$(MYVERSION) -name \\.git`
 	tar -jcvf magicpo-$(MYVERSION).tar.bz2 ./magicpo-$(MYVERSION)
 	rm -rf magicpo-$(MYVERSION)
-# Create a svn snapshot
-svnsnapshot:
-	./tools/SetVersion "$(VERSION)-$(SVNREV)svn"
+# Create a git snapshot
+gitsnapshot:
+	./tools/SetVersion "$(VERSION)-$(GITREV)git"
 	-make distrib
-	mv magicpo-$(VERSION)-$(SVNREV)svn.tar.bz2 magicpo-svnsnapshot.tar.bz2
+	mv magicpo-$(VERSION)-$(GITREV)git.tar.bz2 magicpo-gitsnapshot.tar.bz2
 	./tools/SetVersion "$(VERSION)"
-# User-facing version of svnsnapshot
-svndistrib: MYVERSION =$(VERSION)-$(SVNREV)svn
-svndistrib: distrib
+# User-facing version of gitsnapshot
+gitdistrib: MYVERSION =$(VERSION)-$(GITREV)git
+gitdistrib: distrib

@@ -25,8 +25,6 @@ use constant {
 use Carp;
 our $VERSION;
 $VERSION = 0.4;
-our $RCSREV;
-$RCSREV = '$Id$';
 
 # The string used to indicate that something is not a word.
 # Note: _ is considered a part of a word

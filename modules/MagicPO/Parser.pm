@@ -22,8 +22,6 @@ use constant { true => 1, false => 0 };
 use Carp;
 our $VERSION;
 $VERSION = '0.4';
-our $RCSREV;
-$RCSREV = '$Id$';
 
 # Purpose: Create a new object
 # Usage: $obj = MagicPO::Parser->new(file,progressioncallback?, NoLastTranslator);
