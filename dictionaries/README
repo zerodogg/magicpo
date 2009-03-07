@@ -36,5 +36,4 @@ magicpo-lang-fix.dict - alternatively the -spraakvask suffix is
 allowed in place of -fix. Lang is also here the two character
 abbrivation for the language.
 
-$Id$
 vim: set expandtab :

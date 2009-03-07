@@ -1,5 +1,4 @@
 # MagicPO makefile
-# $Id$
 
 VERSION=0.4
 MYVERSION=$(VERSION)

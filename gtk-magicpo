@@ -63,7 +63,6 @@ use locale;		# Use POSIX locales for things like sorting
 my $pbar;
 my $callP = 0;
 my $progMax = 30;
-my $RCSRev = '$Id$';
 my $Version = '0.4';
 my $listEnt = 0;
 
@@ -633,8 +632,7 @@ sub createMainWindow
 {
 	# Create the window
 	my $win = Gtk2::Window->new();
-	(my $RCS = $RCSRev) =~ s/^\S+\s+\S+\s+(\S+)\s+.*$/$1/;
-	$win->set_title('MagicPO '.$Version.' r'.$RCS);
+	$win->set_title('MagicPO '.$Version);
 	$win->set_resizable(0);
 	$win->set_border_width(5);
 	$win->set_position('center');
