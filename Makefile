@@ -25,7 +25,7 @@ endif
 # Extract the git revision from the log
 GITREV=$(shell git log|head|grep commit|perl -pi -e 'chomp; s/.//g if $$i; $$i =1;s/commit\s*//;')
 
-# Compression filter to use
+# Compression filter to use (ie. gz, bz2, lzma, xz, Z)
 COMPFILTER=bz2
 
 # Install magicpo
