@@ -73,7 +73,7 @@ distrib: distclean test man
 	mkdir -p magicpo-$(MYVERSION)
 	cp -r ./`ls|grep -v magicpo-$(MYVERSION)` ./magicpo-$(MYVERSION)
 	rm -rf `find magicpo-$(MYVERSION) -name \\.git`
-	tar -acvf magicpo-$(MYVERSION).tar.$(COMPFILTER) ./magicpo-$(MYVERSION)
+	tar --use-compress-program=$(COMPFILTER) -cvf magicpo-$(MYVERSION).tar.$(COMPFILTER) ./magicpo-$(MYVERSION)
 	rm -rf magicpo-$(MYVERSION)
 # Create a git snapshot
 gitsnapshot:
