@@ -3,12 +3,16 @@
 VERSION=0.4
 MYVERSION=$(VERSION)
 
+ifdef DESTDIR
+prefix ?= /usr
+endif
 ifndef prefix
 # This little trick ensures that make install will succeed both for a local
 # user and for root. It will also succeed for distro installs as long as
 # prefix is set by the builder.
 prefix=$(shell perl -e 'if($$< == 0 or $$> == 0) { print "/usr" } else { print "$$ENV{HOME}/.local"}')
 endif
+
 
 BINDIR ?= $(prefix)/bin
 DATADIR ?= $(prefix)/share
@@ -23,21 +27,18 @@ GITREV=$(shell git log|head|grep commit|perl -pi -e 'chomp; s/.//g if $$i; $$i =
 
 # Install magicpo
 install: $(POD2MAN)
-	mkdir -p "$(BINDIR)"
-	mkdir -p "$(DATADIR)/magicpo"
-	cp -f magicpo "$(DATADIR)/magicpo/"
-	cp -f gtk-magicpo "$(DATADIR)/magicpo/"
-	ln -sf "$(DATADIR)/magicpo/magicpo" "$(DATADIR)/magicpo/gtk-magicpo" "$(BINDIR)"
-	cp -rf dictionaries modules "$(DATADIR)/magicpo"
-	mkdir -p "$(mandir)/man1"
-	mkdir -p "$(mandir)/man5"
-	cp -f magicpo.1 "$(mandir)/man1/"
-	cp -f magicpo.dict.5 "$(mandir)/man5/"
-	chmod 755 "$(BINDIR)/magicpo"
+	mkdir -p "$(DESTDIR)$(BINDIR)"
+	mkdir -p "$(DESTDIR)$(DATADIR)/magicpo"
+	install -m755 magicpo -D "$(DESTDIR)$(DATADIR)/magicpo/magicpo"
+	install -m755 gtk-magicpo -D "$(DESTDIR)$(DATADIR)/magicpo/gtk-magicpo"
+	ln -sf "$(DATADIR)/magicpo/magicpo" "$(DATADIR)/magicpo/gtk-magicpo" "$(DESTDIR)$(BINDIR)"
+	cp -rf dictionaries modules "$(DESTDIR)$(DATADIR)/magicpo"
+	install -m644 magicpo.1 -D "$(DESTDIR)$(mandir)/man1/magicpo.1"
+	install -m644 magicpo.dict.5 -D "$(DESTDIR)$(mandir)/man5/magicpo.dict.5"
 # Uninstall an installed magicpo
 uninstall:
-	rm -f "$(BINDIR)/magicpo" "$(BINDIR)/gtk-magicpo"
-	rm -rf "$(DATADIR)/magicpo"
+	rm -f "$(DESTDIR)$(BINDIR)/magicpo" "$(DESTDIR)$(BINDIR)/gtk-magicpo"
+	rm -rf "$(DESTDIR)$(DATADIR)/magicpo"
 # Clean up the tree
 clean:
 	rm -f `find|egrep '~$$'`
