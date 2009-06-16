@@ -25,6 +25,9 @@ endif
 # Extract the git revision from the log
 GITREV=$(shell git log|head|grep commit|perl -pi -e 'chomp; s/.//g if $$i; $$i =1;s/commit\s*//;')
 
+# Compression filter to use
+COMPFILTER=bz2
+
 # Install magicpo
 install: $(POD2MAN)
 	mkdir -p "$(DESTDIR)$(BINDIR)"
@@ -44,7 +47,7 @@ clean:
 	rm -f `find|egrep '~$$'`
 	rm -f *.po
 	rm -f *.tmp
-	rm -f magicpo-$(MYVERSION).tar.bz2 magicpo-gitsnapshot-*.tar.bz2
+	rm -f magicpo-$(MYVERSION).tar.$(COMPFILTER) magicpo-gitsnapshot-*.tar.$(COMPFILTER)
 	rm -rf magicpo-$(MYVERSION) magicpo-$(MYVERSION)-*git
 # Verify syntax and run automated tests
 test:
@@ -70,13 +73,13 @@ distrib: distclean test man
 	mkdir -p magicpo-$(MYVERSION)
 	cp -r ./`ls|grep -v magicpo-$(MYVERSION)` ./magicpo-$(MYVERSION)
 	rm -rf `find magicpo-$(MYVERSION) -name \\.git`
-	tar -jcvf magicpo-$(MYVERSION).tar.bz2 ./magicpo-$(MYVERSION)
+	tar -acvf magicpo-$(MYVERSION).tar.$(COMPFILTER) ./magicpo-$(MYVERSION)
 	rm -rf magicpo-$(MYVERSION)
 # Create a git snapshot
 gitsnapshot:
 	./tools/SetVersion "$(VERSION)-$(GITREV)git"
 	-make distrib
-	mv magicpo-$(VERSION)-$(GITREV)git.tar.bz2 magicpo-gitsnapshot-$(GITREV).tar.bz2
+	mv magicpo-$(VERSION)-$(GITREV)git.tar.$(COMPFILTER) magicpo-gitsnapshot-$(GITREV).tar.$(COMPFILTER)
 	./tools/SetVersion "$(VERSION)"
 # User-facing version of gitsnapshot
 gitdistrib: MYVERSION =$(VERSION)-$(GITREV)git
