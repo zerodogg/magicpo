@@ -817,9 +817,9 @@ The latter can be supressed with the --silent and --nomarkfuzzy commandline argu
 
 =head1 OPTIONS
 
-=over
-
 =head2 GENERAL OPTIONS
+
+=over
 
 =item B<-h, --help>
 
@@ -838,7 +838,11 @@ Display various information useful for debugging.
 Don't perform any replacements or translations, just reformat the PO-file.
 Overrides everything else.
 
+=back
+
 =head2 DICTIONARY OPTIONS
+
+=over
 
 =item B<-d, --dict> I<NAME>
 
@@ -890,10 +894,14 @@ So if you want to see which dictionary entries keep messing up string number 5, 
 You can also use --whatchanged "String". The string must then be EXACTLY as it is in
 the po-file. Also, this will not work when running on multiple files.
 
+=back
+
 =head2 DATABASE OPTIONS
 
 When either of these options are used, all dictionary-related commandline options will be
 ignored.
+
+=over
 
 =item B<--mkdb> I<FILE>
 
