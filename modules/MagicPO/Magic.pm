@@ -64,9 +64,17 @@ sub replaceString
 	my $dirty = false;
 	my $newString;
 
+	$string =~ s/>/>\n/;
+	$string =~ s/</\n</;
+
 	foreach my $strPart (split(/\n/,$string))
 	{
-		next if $strPart =~ /^(<|\%)/;
+#		next if $strPart =~ /^(<|\%)/;
+		if ($strPart =~ /^</)
+		{
+			$newString .= $strPart;
+			next;
+		}
 		# Pad the string
 		$strPart = ' '.$strPart.' ';
 		# Prep exhaustive regexping on $string
@@ -116,6 +124,8 @@ sub replaceString
 	else
 	{
 		$newString =~ s/\n//g;
+		$newString =~ s/>\n/>/;
+		$newString =~ s/<\n/</;
 	}
 	# If the caller wants more than one return value, return the new
 	# string and the dirty status
