@@ -750,6 +750,18 @@ GetOptions (
 		Version();
 		printf 'Perl version:          %vd'."\n", $^V;
 		print 'OS: ', GetDistVer(), "\n";
+		eval('use Digest::MD5;');
+		my $md5 = Digest::MD5->new();
+		my $self = $0;
+		if(not -f $self)
+		{
+			$self = InPath($self);
+		}
+		open(my $f,'<',$self);
+		$md5->addfile($f);
+		my $digest = $md5->hexdigest;
+		close($f);
+		print 'MD5: '.$digest."\n";
 		exit(0);
 	},
 	# Dict mode arguments
