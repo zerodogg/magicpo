@@ -1,5 +1,6 @@
 # MagicPO Norwegian Nynorsk språkvask dictionary
-# Copyright (C) 2008 Eskild Hustvedt
+# Copyright © 2008 Eskild Hustvedt
+# Copyright © 2008 Karl Ove Hufthammer
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -30,21 +31,52 @@ førespurnadane = førespurnadene
 
 
 # skrivefeil
+ein attributt = eitt attributt
+attributten = attributtet
+attributtar = attributt
+noko e-postadress[ae] = noka e-postadresse
+ei e-postadressa = ei e-postadresse
+ei avsendaradressa = ei avsenderadresse
+dobbelklikk* = dobbeltklikk
+eit faneblad = ei fane
+fanebladet = fana
+fiel = feil
+*framgong* = framgang
 ei frase = ein frase
 fraser = frasar
 # men ikkje endra Fraser Lake:
 Fraser Lake = Fraser Lake
-kalendar* = kalender
+ein gang = ein gong
+i gong = i gang
+*gongar = gonger
+*gongane = gongene
 handheldte = handhaldne
-vedlikeheldar = vedlikehaldar
-tolmodig* = tålmodig
-eit faneblad = ei fane
-fanebladet = fana
-noko e-postadress[ae] = noka e-postadresse
-ei e-postadressa = ei e-postadresse
-ei avsendaradressa = ei avsenderadresse
-uten = utan
+ikke = ikkje
+kalendar* = kalender
+ei kjerne = ein kjerne
+kjerna = kjernen
+*kolonner = kolonnar
+*kolonnene = kolonnane
 kun = berre
+løkkja = lykkja
+løkkje = lykkje
+*mediaspelar* = mediespelar
+*mediaeining* = medieeining
+muspeikar* = musepeikar
+omsetting = omsetjing
+oppsto = oppstod
+rekkefølge = rekkjefølgje
+rekkefølga = rekkjefølgja
+tolmodig* = tålmodig
+trå i kraft = tre i kraft
+trår i kraft = trer i kraft
+uten = utan
+har vald = har valt
+vedlikeheldar = vedlikehaldar
+
+
+
+
 
 
 # ord me har blitt einige om
@@ -56,6 +88,17 @@ behandl[ae] = handsama
 brukarval = innstillingar
 snarvegtast* = snøggtast
 gildskap = gyldigheit
+*skjermspar[ae]r* = pauseskjerm
+arkfan* = fan
+oppspretts? = sprettopp
+oppsprettmeny = sprettoppmeny
+dato og tid = dato og klokkeslett
+skjul = gøym
+skjula = gøyma
+skjult = gøymd
+styrepinne = styrespak
+
+
 
 
 # ordformer me har blitt einige om
@@ -68,6 +111,8 @@ Bli = Vert
 # Obs: «blitt» er ikkje med, sidan det kan verta til tre ulike former
 #      («vorten», «vorte», «vortne)», og «bli» er ikkje med, då
 #      det kan vera både imperativ (→ vert, ikkje verta) og infinitiv.
+draga = dra
+drag = dra
 førenamn* = fornamn
 førebokstav* = forbokstav
 framføre = framfor
@@ -77,29 +122,48 @@ gjennomsynleg = gjennomsiktig
 giss[ae] = gjetta
 hør[ae]* = høyra
 kjør[ae]* = køyra
+korkje = verken
 lata = la
 ljos* = lys
 *laup = løp
 *lykka = lukka
+medan = mens
 moge?leg = mogleg
 muleg = mogleg
 mye = mykje
 nyhende = nyheiter
 nyhende* = nyheits
 naudsynt = nødvendig
+eit oversyn = ei oversikt
+oversyn = oversikt
+oversynet = oversikta
 *resurs* = ressurs
 samstundes = samtidig
+ein sekund = eit sekund
+éin sekund = eitt sekund
+sekundar = sekund
 *slådd = slått
 *slådde = slåtte
 *slegne = slåtte
 *slegen? = slått
 # Men ikkje kjenslege → kjenslått:
 kjenslege = kjenslege
+somme = nokre
+*svarer = svarar
+svarde = svara
 tøm[ae] = tømma
 verkty = verktøy
 *viljug = villig
 unnatak = unntak
 velkomen = velkommen
+
+
+
+# uttrykk me har blitt einige om
+Ein feil oppstod = Det oppstod ein feil
+
+
+
 
 
 # nokre vanlige e-infinitiv som må rettast
@@ -113,4 +177,5 @@ køyre = køyra
 
 # programnamn
 Kontact* = Kontakt
-
+Konsole* = Konsoll
+KMines = KMinesveipar
