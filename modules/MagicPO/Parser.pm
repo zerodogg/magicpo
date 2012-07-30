@@ -46,6 +46,7 @@ sub new
 	$this->{Lookup} = {};
 	$this->{PoFile} = {};
 	$this->{IDS} = 0;
+    $this->{broken} = $ENV{'MAGICPO_P_ALLOW_BROKEN'} || 0;
 	$this->_LoadFile($file);
 	return($this);
 }
@@ -841,11 +842,18 @@ sub _addToLookup
 		# the file.
 		if($isFromFile and defined $this->{Lookup}{$lookupString})
 		{
-			# Ouch, duplicate definitions. This is a PO syntax-error
-			$this->_perr("String ($lookupString) already defined earlier in the file. This is a syntax-error in the PO-file, ignoring this definition\n");
-			# Delete what we have parsed so far and set the ReplaceLastID flag
-			delete($this->{PoFile}{$ID});
-			$this->{ReplaceLastID} = true;
+            # Ouch, duplicate definitions. This is a PO syntax-error
+            if ($this->{broken})
+            {
+                $this->_perr("Duplicate msgid found. This is a syntax-error in the PO-file. Leaving the entry as-is due to MAGICPO_P_ALLOW_BROKEN, but omitting from lookup table");
+            }
+            else
+            {
+                $this->_perr("Duplicate msgid found. This is a syntax-error in the PO-file, ignoring this definition\n");
+                # Delete what we have parsed so far and set the ReplaceLastID flag
+                delete($this->{PoFile}{$ID});
+                $this->{ReplaceLastID} = true;
+            }
 		}
 		else
 		{
